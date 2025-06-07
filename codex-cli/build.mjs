@@ -69,20 +69,31 @@ if (isDevBuild) {
   plugins.push(devShebangPlugin);
 }
 
-esbuild
-  .build({
-    entryPoints: ["src/cli.tsx"],
-    // Do not bundle the contents of package.json at build time: always read it
-    // at runtime.
-    external: ["../package.json"],
-    bundle: true,
-    format: "esm",
-    platform: "node",
-    tsconfig: "tsconfig.json",
+const builds = [
+  {
+    entry: "src/cli.tsx",
     outfile: isDevBuild ? `${OUT_DIR}/cli-dev.js` : `${OUT_DIR}/cli.js`,
-    minify: !isDevBuild,
-    sourcemap: isDevBuild ? "inline" : true,
-    plugins,
-    inject: ["./require-shim.js"],
-  })
-  .catch(() => process.exit(1));
+  },
+  {
+    entry: "src/remote-session.ts",
+    outfile: `${OUT_DIR}/remote-session.js`,
+  },
+];
+
+Promise.all(
+  builds.map((cfg) =>
+    esbuild.build({
+      entryPoints: [cfg.entry],
+      external: ["../package.json"],
+      bundle: true,
+      format: "esm",
+      platform: "node",
+      tsconfig: "tsconfig.json",
+      outfile: cfg.outfile,
+      minify: !isDevBuild,
+      sourcemap: isDevBuild ? "inline" : true,
+      plugins,
+      inject: ["./require-shim.js"],
+    })
+  )
+).catch(() => process.exit(1));
