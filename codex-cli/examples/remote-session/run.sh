@@ -3,4 +3,4 @@
 
 dir="$(cd "$(dirname "$0")" && pwd)"
 cd "$dir" || exit 1
-node server.js
+codexzipus
