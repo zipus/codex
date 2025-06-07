@@ -28,6 +28,7 @@ import type { ReasoningEffort } from "openai/resources.mjs";
 import App from "./app";
 import { runSinglePass } from "./cli-singlepass";
 import SessionsOverlay from "./components/sessions-overlay.js";
+import REMOTE_HTML from "./remote-html";
 import { AgentLoop } from "./utils/agent/agent-loop";
 import { ReviewDecision } from "./utils/agent/review";
 import { AutoApprovalMode } from "./utils/auto-approval-mode";
@@ -48,12 +49,15 @@ import { parseToolCall } from "./utils/parsers";
 import { onExit, setInkRenderer } from "./utils/terminal";
 import chalk from "chalk";
 import { spawnSync } from "child_process";
+import express from "express";
 import fs from "fs";
 import { render } from "ink";
 import meow from "meow";
+import open from "open";
 import os from "os";
 import path from "path";
 import React from "react";
+import { fileURLToPath } from "url";
 
 // Call this early so `tail -F "$TMPDIR/oai-codex/codex-cli-latest.log"` works
 // immediately. This must be run with DEBUG=1 for logging to work.
@@ -101,6 +105,9 @@ const cli = meow(
                               with models o3 and o4-mini)
 
     --reasoning <effort>      Set the reasoning effort level (low, medium, high) (default: high)
+
+    --remote-session          Start a local web server for remote interaction
+    --port <port>             Port for the web server (default: 3000)
 
   Dangerous options
     --dangerously-auto-approve-everything
@@ -192,6 +199,14 @@ const cli = meow(
         description: "Set the reasoning effort level (low, medium, high)",
         choices: ["low", "medium", "high"],
         default: "high",
+      },
+      remoteSession: {
+        type: "boolean",
+        description: "Start a local web server for remote interaction",
+      },
+      port: {
+        type: "string",
+        description: "Port for the web server (default: 3000)",
       },
       // Notification
       notify: {
@@ -292,6 +307,34 @@ let prompt = cli.input[0];
 const model = cli.flags.model ?? config.model;
 const imagePaths = cli.flags.image;
 const provider = cli.flags.provider ?? config.provider ?? "openai";
+
+if (cli.flags.remoteSession) {
+  const port = Number(cli.flags.port ?? 3000);
+  const app = express();
+  app.use(express.json());
+  app.get("/", (_req, res) => {
+    res.type("html").send(REMOTE_HTML);
+  });
+  app.post("/run", (req, res) => {
+    const promptText = req.body?.prompt;
+    if (!promptText) {
+      res.status(400).json({ error: "Missing prompt" });
+      return;
+    }
+    const cliPath = fileURLToPath(import.meta.url);
+    const child = spawnSync(process.execPath, [cliPath, "-q", promptText], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    res.json({ output: child.stdout + child.stderr });
+  });
+  app.listen(port, () => {
+    // eslint-disable-next-line no-console
+    console.log(`Codex web server running on http://localhost:${port}`);
+    open(`http://localhost:${port}`);
+  });
+  await new Promise(() => {});
+}
 
 const client = {
   issuer: "https://auth.openai.com",
