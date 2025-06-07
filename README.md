@@ -143,6 +143,18 @@ That's it - Codex will scaffold a file, run it inside a sandbox, install any
 missing dependencies, and show you the live result. Approve the changes and
 they'll be committed to your working directory.
 
+### Remote session mode
+
+Run a web server to interact with Codex from your browser:
+
+```shell
+codex --remote-session --port 3000
+```
+
+This launches a local website at `http://localhost:3000` (or the port you
+specify) and lets you send prompts and view results without leaving the
+terminal.
+
 ---
 
 ## Why Codex?
@@ -221,6 +233,7 @@ The hardening mechanism Codex uses depends on your OS:
 | `codex "..."`                        | Initial prompt for interactive REPL | `codex "fix lint errors"`            |
 | `codex -q "..."`                     | Non-interactive "quiet mode"        | `codex -q --json "explain utils.ts"` |
 | `codex completion <bash\|zsh\|fish>` | Print shell completion script       | `codex completion bash`              |
+| `codex --remote-session`            | Start web server for remote use     | `codex --remote-session --port 4000` |
 
 Key flags: `--model/-m`, `--approval-mode/-a`, `--quiet/-q`, and `--notify`.
 
