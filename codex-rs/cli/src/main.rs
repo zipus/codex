@@ -1081,6 +1081,9 @@ fn merge_interactive_cli_flags(interactive: &mut TuiCli, subcommand_cli: TuiCli)
         // Normalize CRLF/CR to LF so CLI-provided text can't leak `\r` into TUI state.
         interactive.prompt = Some(prompt.replace("\r\n", "\n").replace('\r', "\n"));
     }
+    if let Some(thread_name) = subcommand_cli.thread_name {
+        interactive.thread_name = Some(thread_name);
+    }
 
     interactive
         .config_overrides
@@ -1375,6 +1378,19 @@ mod tests {
         assert!(!interactive.resume_picker);
         assert!(!interactive.resume_last);
         assert_eq!(interactive.resume_session_id.as_deref(), Some("sid"));
+    }
+
+    #[test]
+    fn interactive_cli_accepts_thread_name_flag() {
+        let cli = MultitoolCli::try_parse_from(["codex", "--name", "issue 14482"]).expect("parse");
+        assert_eq!(cli.interactive.thread_name.as_deref(), Some("issue 14482"));
+    }
+
+    #[test]
+    fn resume_merges_thread_name_flag_for_validation() {
+        let interactive =
+            finalize_resume_from_args(["codex", "resume", "--name", "issue 14482"].as_ref());
+        assert_eq!(interactive.thread_name.as_deref(), Some("issue 14482"));
     }
 
     #[test]

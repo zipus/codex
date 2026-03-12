@@ -470,6 +470,7 @@ pub(crate) struct ChatWidgetInit {
     pub(crate) config: Config,
     pub(crate) frame_requester: FrameRequester,
     pub(crate) app_event_tx: AppEventSender,
+    pub(crate) initial_thread_name: Option<String>,
     pub(crate) initial_user_message: Option<UserMessage>,
     pub(crate) enhanced_keys_supported: bool,
     pub(crate) auth_manager: Arc<AuthManager>,
@@ -3174,6 +3175,7 @@ impl ChatWidget {
             config,
             frame_requester,
             app_event_tx,
+            initial_thread_name,
             initial_user_message,
             enhanced_keys_supported,
             auth_manager,
@@ -3192,7 +3194,12 @@ impl ChatWidget {
         let prevent_idle_sleep = config.features.enabled(Feature::PreventIdleSleep);
         let mut rng = rand::rng();
         let placeholder = PLACEHOLDERS[rng.random_range(0..PLACEHOLDERS.len())].to_string();
-        let codex_op_tx = spawn_agent(config.clone(), app_event_tx.clone(), thread_manager);
+        let codex_op_tx = spawn_agent(
+            config.clone(),
+            app_event_tx.clone(),
+            thread_manager,
+            initial_thread_name,
+        );
 
         let model_override = model.as_deref();
         let model_for_header = model
@@ -3360,6 +3367,7 @@ impl ChatWidget {
             config,
             frame_requester,
             app_event_tx,
+            initial_thread_name: _,
             initial_user_message,
             enhanced_keys_supported,
             auth_manager,

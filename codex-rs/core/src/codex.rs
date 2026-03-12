@@ -365,6 +365,7 @@ pub(crate) struct CodexSpawnArgs {
     pub(crate) dynamic_tools: Vec<DynamicToolSpec>,
     pub(crate) persist_extended_history: bool,
     pub(crate) metrics_service_name: Option<String>,
+    pub(crate) initial_thread_name: Option<String>,
     pub(crate) inherited_shell_snapshot: Option<Arc<ShellSnapshot>>,
     pub(crate) parent_trace: Option<W3cTraceContext>,
 }
@@ -415,6 +416,7 @@ impl Codex {
             dynamic_tools,
             persist_extended_history,
             metrics_service_name,
+            initial_thread_name,
             inherited_shell_snapshot,
             parent_trace: _,
         } = args;
@@ -569,7 +571,7 @@ impl Codex {
             windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
             cwd: config.cwd.clone(),
             codex_home: config.codex_home.clone(),
-            thread_name: None,
+            thread_name: initial_thread_name,
             original_config_do_not_use: Arc::clone(&config),
             metrics_service_name,
             app_server_client_name: None,
@@ -1607,7 +1609,7 @@ impl Session {
             default_shell.shell_snapshot = rx;
             tx
         };
-        let thread_name =
+        let mut thread_name =
             match session_index::find_thread_name_by_id(&config.codex_home, &conversation_id).await
             {
                 Ok(name) => name,
@@ -1616,6 +1618,21 @@ impl Session {
                     None
                 }
             };
+        if thread_name.is_none()
+            && let Some(initial_thread_name) = session_configuration.thread_name.clone()
+        {
+            if rollout_path.is_none() {
+                anyhow::bail!("Session persistence is disabled; cannot set initial thread name.");
+            }
+            session_index::append_thread_name(
+                &config.codex_home,
+                conversation_id,
+                &initial_thread_name,
+            )
+            .await
+            .map_err(anyhow::Error::from)?;
+            thread_name = Some(initial_thread_name);
+        }
         session_configuration.thread_name = thread_name.clone();
         let state = SessionState::new(session_configuration.clone());
         let managed_network_requirements_enabled = config.managed_network_requirements_enabled();

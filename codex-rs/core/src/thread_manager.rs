@@ -333,7 +333,21 @@ impl ThreadManager {
     pub async fn start_thread(&self, config: Config) -> CodexResult<NewThread> {
         // Box delegated thread-spawn futures so these convenience wrappers do
         // not inline the full spawn path into every caller's async state.
-        Box::pin(self.start_thread_with_tools(config, Vec::new(), false)).await
+        Box::pin(self.start_thread_with_name(config, None)).await
+    }
+
+    pub async fn start_thread_with_name(
+        &self,
+        config: Config,
+        initial_thread_name: Option<String>,
+    ) -> CodexResult<NewThread> {
+        Box::pin(self.start_thread_with_tools_and_name(
+            config,
+            Vec::new(),
+            false,
+            initial_thread_name,
+        ))
+        .await
     }
 
     pub async fn start_thread_with_tools(
@@ -342,11 +356,28 @@ impl ThreadManager {
         dynamic_tools: Vec<codex_protocol::dynamic_tools::DynamicToolSpec>,
         persist_extended_history: bool,
     ) -> CodexResult<NewThread> {
+        Box::pin(self.start_thread_with_tools_and_name(
+            config,
+            dynamic_tools,
+            persist_extended_history,
+            None,
+        ))
+        .await
+    }
+
+    async fn start_thread_with_tools_and_name(
+        &self,
+        config: Config,
+        dynamic_tools: Vec<codex_protocol::dynamic_tools::DynamicToolSpec>,
+        persist_extended_history: bool,
+        initial_thread_name: Option<String>,
+    ) -> CodexResult<NewThread> {
         Box::pin(self.start_thread_with_tools_and_service_name(
             config,
             dynamic_tools,
             persist_extended_history,
             None,
+            initial_thread_name,
             None,
         ))
         .await
@@ -358,6 +389,7 @@ impl ThreadManager {
         dynamic_tools: Vec<codex_protocol::dynamic_tools::DynamicToolSpec>,
         persist_extended_history: bool,
         metrics_service_name: Option<String>,
+        initial_thread_name: Option<String>,
         parent_trace: Option<W3cTraceContext>,
     ) -> CodexResult<NewThread> {
         Box::pin(self.state.spawn_thread(
@@ -368,6 +400,7 @@ impl ThreadManager {
             dynamic_tools,
             persist_extended_history,
             metrics_service_name,
+            initial_thread_name,
             parent_trace,
         ))
         .await
@@ -406,6 +439,7 @@ impl ThreadManager {
             self.agent_control(),
             Vec::new(),
             persist_extended_history,
+            None,
             None,
             parent_trace,
         ))
@@ -492,6 +526,7 @@ impl ThreadManager {
             Vec::new(),
             persist_extended_history,
             None,
+            None,
             parent_trace,
         ))
         .await
@@ -554,6 +589,7 @@ impl ThreadManagerState {
             false,
             None,
             None,
+            None,
         ))
         .await
     }
@@ -576,6 +612,7 @@ impl ThreadManagerState {
             Vec::new(),
             persist_extended_history,
             metrics_service_name,
+            None,
             inherited_shell_snapshot,
             None,
         ))
@@ -599,6 +636,7 @@ impl ThreadManagerState {
             session_source,
             Vec::new(),
             false,
+            None,
             None,
             inherited_shell_snapshot,
             None,
@@ -624,6 +662,7 @@ impl ThreadManagerState {
             Vec::new(),
             persist_extended_history,
             None,
+            None,
             inherited_shell_snapshot,
             None,
         ))
@@ -641,6 +680,7 @@ impl ThreadManagerState {
         dynamic_tools: Vec<codex_protocol::dynamic_tools::DynamicToolSpec>,
         persist_extended_history: bool,
         metrics_service_name: Option<String>,
+        initial_thread_name: Option<String>,
         parent_trace: Option<W3cTraceContext>,
     ) -> CodexResult<NewThread> {
         Box::pin(self.spawn_thread_with_source(
@@ -652,6 +692,7 @@ impl ThreadManagerState {
             dynamic_tools,
             persist_extended_history,
             metrics_service_name,
+            initial_thread_name,
             None,
             parent_trace,
         ))
@@ -669,6 +710,7 @@ impl ThreadManagerState {
         dynamic_tools: Vec<codex_protocol::dynamic_tools::DynamicToolSpec>,
         persist_extended_history: bool,
         metrics_service_name: Option<String>,
+        initial_thread_name: Option<String>,
         inherited_shell_snapshot: Option<Arc<ShellSnapshot>>,
         parent_trace: Option<W3cTraceContext>,
     ) -> CodexResult<NewThread> {
@@ -691,6 +733,7 @@ impl ThreadManagerState {
             dynamic_tools,
             persist_extended_history,
             metrics_service_name,
+            initial_thread_name,
             inherited_shell_snapshot,
             parent_trace,
         })

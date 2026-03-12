@@ -1,6 +1,7 @@
 use super::*;
 use crate::codex::make_session_and_context;
 use crate::config::test_config;
+use crate::find_thread_name_by_id;
 use assert_matches::assert_matches;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ReasoningItemReasoningSummary;
@@ -149,4 +150,34 @@ async fn shutdown_all_threads_bounded_submits_shutdown_to_every_thread() {
     assert!(report.submit_failed.is_empty());
     assert!(report.timed_out.is_empty());
     assert!(manager.list_thread_ids().await.is_empty());
+}
+
+#[tokio::test]
+async fn start_thread_with_name_persists_thread_name() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config();
+    config.codex_home = temp_dir.path().join("codex-home");
+    config.cwd = config.codex_home.clone();
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+
+    let manager = ThreadManager::with_models_provider_and_home_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.clone(),
+    );
+    let thread = manager
+        .start_thread_with_name(config.clone(), Some("issue 14482".to_string()))
+        .await
+        .expect("start named thread");
+
+    assert_eq!(
+        thread.session_configured.thread_name,
+        Some("issue 14482".to_string())
+    );
+    assert_eq!(
+        find_thread_name_by_id(&config.codex_home, &thread.thread_id)
+            .await
+            .expect("load thread name"),
+        Some("issue 14482".to_string())
+    );
 }

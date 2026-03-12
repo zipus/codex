@@ -11,6 +11,10 @@ pub struct Cli {
     #[arg(value_name = "PROMPT", value_hint = clap::ValueHint::Other)]
     pub prompt: Option<String>,
 
+    /// Set the initial thread name for a fresh interactive session.
+    #[arg(long = "name", value_name = "THREAD_NAME")]
+    pub thread_name: Option<String>,
+
     /// Optional image(s) to attach to the initial prompt.
     #[arg(long = "image", short = 'i', value_name = "FILE", value_delimiter = ',', num_args = 1..)]
     pub images: Vec<PathBuf>,

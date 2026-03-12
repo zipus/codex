@@ -1996,6 +1996,7 @@ impl CodexMessageProcessor {
                 core_dynamic_tools,
                 persist_extended_history,
                 service_name,
+                None,
                 request_trace,
             )
             .await

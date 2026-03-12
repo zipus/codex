@@ -910,6 +910,42 @@ async fn run_ratatui_app(
         && trust_decision_was_made
         && WindowsSandboxLevel::from_config(&config) == WindowsSandboxLevel::Disabled;
 
+    let initial_thread_name = cli
+        .thread_name
+        .as_deref()
+        .and_then(codex_core::util::normalize_thread_name);
+    if cli.thread_name.is_some() && initial_thread_name.is_none() {
+        restore();
+        session_log::log_session_end();
+        let _ = tui.terminal.clear();
+        return Ok(AppExitInfo {
+            token_usage: codex_protocol::protocol::TokenUsage::default(),
+            thread_id: None,
+            thread_name: None,
+            update_action: None,
+            exit_reason: ExitReason::Fatal("Thread name cannot be empty.".to_string()),
+        });
+    }
+    if initial_thread_name.is_some()
+        && !matches!(
+            session_selection,
+            resume_picker::SessionSelection::StartFresh
+        )
+    {
+        restore();
+        session_log::log_session_end();
+        let _ = tui.terminal.clear();
+        return Ok(AppExitInfo {
+            token_usage: codex_protocol::protocol::TokenUsage::default(),
+            thread_id: None,
+            thread_name: None,
+            update_action: None,
+            exit_reason: ExitReason::Fatal(
+                "`--name` is only supported when starting a fresh interactive session.".to_string(),
+            ),
+        });
+    }
+
     let Cli {
         prompt,
         images,
@@ -927,6 +963,7 @@ async fn run_ratatui_app(
         cli_kv_overrides.clone(),
         overrides.clone(),
         active_profile,
+        initial_thread_name,
         prompt,
         images,
         session_selection,
