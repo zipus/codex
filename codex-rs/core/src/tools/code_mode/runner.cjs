@@ -134,8 +134,8 @@ function codeModeWorkerMain() {
   function createToolsNamespace(callTool, enabledTools) {
     const tools = Object.create(null);
 
-    for (const { tool_name } of enabledTools) {
-      Object.defineProperty(tools, tool_name, {
+    for (const { tool_name, global_name } of enabledTools) {
+      Object.defineProperty(tools, global_name, {
         value: async (args) => callTool(tool_name, args),
         configurable: false,
         enumerable: true,
@@ -163,9 +163,9 @@ function codeModeWorkerMain() {
     const allTools = createAllToolsMetadata(enabledTools);
     const exportNames = ['ALL_TOOLS'];
 
-    for (const { tool_name } of enabledTools) {
-      if (tool_name !== 'ALL_TOOLS') {
-        exportNames.push(tool_name);
+    for (const { global_name } of enabledTools) {
+      if (global_name !== 'ALL_TOOLS') {
+        exportNames.push(global_name);
       }
     }
 
@@ -265,7 +265,7 @@ function codeModeWorkerMain() {
         'set_max_output_tokens_per_exec_call',
         'set_yield_time',
         'store',
-        'background',
+        'yield_control',
       ],
       function initCodeModeModule() {
         this.setExport('load', load);
@@ -289,7 +289,7 @@ function codeModeWorkerMain() {
           return normalized;
         });
         this.setExport('store', store);
-        this.setExport('background', () => {
+        this.setExport('yield_control', () => {
           parentPort.postMessage({ type: 'yield' });
         });
       },
@@ -382,6 +382,24 @@ function codeModeWorkerMain() {
     };
   }
 
+  async function resolveDynamicModule(specifier, resolveModule) {
+    const module = resolveModule(specifier);
+
+    if (module.status === 'unlinked') {
+      await module.link(resolveModule);
+    }
+
+    if (module.status === 'linked' || module.status === 'evaluating') {
+      await module.evaluate();
+    }
+
+    if (module.status === 'errored') {
+      throw module.error;
+    }
+
+    return module;
+  }
+
   async function runModule(context, start, state, callTool) {
     const resolveModule = createModuleResolver(
       context,
@@ -392,7 +410,8 @@ function codeModeWorkerMain() {
     const mainModule = new SourceTextModule(start.source, {
       context,
       identifier: 'exec_main.mjs',
-      importModuleDynamically: async (specifier) => resolveModule(specifier),
+      importModuleDynamically: async (specifier) =>
+        resolveDynamicModule(specifier, resolveModule),
     });
 
     await mainModule.link(resolveModule);
@@ -408,7 +427,6 @@ function codeModeWorkerMain() {
     const callTool = createToolCaller();
     const context = vm.createContext({
       __codexContentItems: createContentItems(),
-      __codex_tool_call: callTool,
     });
 
     try {
@@ -468,7 +486,7 @@ function createProtocol() {
     }
 
     if (message.type === 'poll') {
-      const session = sessions.get(message.session_id);
+      const session = sessions.get(message.cell_id);
       if (session) {
         session.request_id = String(message.request_id);
         if (session.pending_result) {
@@ -482,7 +500,7 @@ function createProtocol() {
           request_id: message.request_id,
           content_items: [],
           stored_values: {},
-          error_text: `exec session ${message.session_id} not found`,
+          error_text: `exec cell ${message.cell_id} not found`,
           max_output_tokens_per_exec_call: DEFAULT_MAX_OUTPUT_TOKENS_PER_EXEC_CALL,
         });
       }
@@ -490,7 +508,7 @@ function createProtocol() {
     }
 
     if (message.type === 'terminate') {
-      const session = sessions.get(message.session_id);
+      const session = sessions.get(message.cell_id);
       if (session) {
         session.request_id = String(message.request_id);
         void terminateSession(protocol, sessions, session);
@@ -500,7 +518,7 @@ function createProtocol() {
           request_id: message.request_id,
           content_items: [],
           stored_values: {},
-          error_text: `exec session ${message.session_id} not found`,
+          error_text: `exec cell ${message.cell_id} not found`,
           max_output_tokens_per_exec_call: DEFAULT_MAX_OUTPUT_TOKENS_PER_EXEC_CALL,
         });
       }
@@ -572,7 +590,8 @@ function startSession(protocol, sessions, start) {
   const session = {
     completed: false,
     content_items: [],
-    id: start.session_id,
+    default_yield_time_ms: normalizeYieldTime(start.default_yield_time_ms),
+    id: start.cell_id,
     initial_yield_timer: null,
     initial_yield_triggered: false,
     max_output_tokens_per_exec_call: DEFAULT_MAX_OUTPUT_TOKENS_PER_EXEC_CALL,
@@ -585,6 +604,7 @@ function startSession(protocol, sessions, start) {
     }),
   };
   sessions.set(session.id, session);
+  scheduleInitialYield(protocol, session, session.default_yield_time_ms);
 
   session.worker.on('message', (message) => {
     void handleWorkerMessage(protocol, sessions, session, message).catch((error) => {
@@ -697,6 +717,9 @@ async function sendYielded(protocol, session) {
   if (session.completed || session.request_id === null) {
     return;
   }
+  session.initial_yield_timer = clearTimer(session.initial_yield_timer);
+  session.initial_yield_triggered = true;
+  session.poll_yield_timer = clearTimer(session.poll_yield_timer);
   const contentItems = takeContentItems(session);
   const requestId = session.request_id;
   try {
